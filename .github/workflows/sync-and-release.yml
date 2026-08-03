@@ -1,0 +1,46 @@
+name: Sync & Build Antigravity Termux Standalone
+
+on:
+  schedule:
+    # Run automatically every 6 hours
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install ARM64 Cross Compilers & Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu ripgrep curl tar
+
+      - name: Run Build & Patch Pipeline
+        run: |
+          chmod +x scripts/build_standalone.sh
+          ./scripts/build_standalone.sh
+
+      - name: Query Upstream Version Tag
+        id: version_check
+        run: |
+          TAG_NAME="v$(date +'%Y.%m.%d-%H%M')"
+          echo "tag_name=${TAG_NAME}" >> $GITHUB_OUTPUT
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version_check.outputs.tag_name }}
+          name: "Antigravity CLI Termux Standalone ${{ steps.version_check.outputs.tag_name }}"
+          draft: false
+          prerelease: false
+          files: |
+            dist/antigravity-termux-standalone.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
