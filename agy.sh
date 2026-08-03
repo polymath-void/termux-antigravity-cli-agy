@@ -1,19 +1,20 @@
 #!/data/data/com.termux/files/usr/bin/env bash
 # ==============================================================================
 # agy.sh - Google Antigravity CLI (agy) Standalone Termux Installer & Manager
-# https://github.com/wallentx/antigravity-cli-termux
+# https://github.com/polymath-void/termux-antigravity-cli-agy
 # ==============================================================================
 # Features:
-# - Full automated dependency resolution (curl, tar, git, ripgrep, glibc, resolv-conf)
-# - Hardware capability detection (ARM64 LSE atomics check & auto QEMU fallback)
+# - Full automated dependency resolution (curl, tar, git, ripgrep, glibc-repo, glibc-runner, resolv-conf)
+# - Smart binary caching & version check (skip download if up to date, interactive force prompt)
+# - Hardware capability detection (ARM64 LSE atomics & 32-bit QEMU user-mode fallback)
 # - Zero-touch non-interactive mode (-y / --yes)
-# - Version checking (--check) and repair/reinstall mode (--force)
-# - Shell profile environment integration (~/.bashrc / ~/.zshrc)
-# - Post-installation runtime diagnostic verification
+# - Rich terminal micro-animations & vibrant color palette
+# - Shell profile environment & alias auto-integration (~/.bashrc / ~/.zshrc)
+# - Post-installation runtime health verification
 # ==============================================================================
 set -Eeuo pipefail
 
-SCRIPT_VERSION="1.2.0"
+SCRIPT_VERSION="1.3.0"
 REPO="${AGY_REPO:-polymath-void/termux-antigravity-cli-agy}"
 URL="${AGY_INSTALL_URL:-https://github.com/$REPO/releases/latest/download/antigravity-termux-standalone.tar.gz}"
 
@@ -27,43 +28,44 @@ PROOT_MODE=0
 if [[ -t 1 ]]; then
   BOLD="\033[1m"
   DIM="\033[2m"
-  GREEN="\033[32m"
-  RED="\033[31m"
-  YELLOW="\033[33m"
-  CYAN="\033[36m"
-  MAGENTA="\033[35m"
+  GREEN="\033[38;5;82m"
+  RED="\033[38;5;196m"
+  YELLOW="\033[38;5;220m"
+  CYAN="\033[38;5;51m"
+  MAGENTA="\033[38;5;201m"
+  BLUE="\033[38;5;39m"
   RESET="\033[0m"
 else
-  BOLD="" DIM="" GREEN="" RED="" YELLOW="" CYAN="" MAGENTA="" RESET=""
+  BOLD="" DIM="" GREEN="" RED="" YELLOW="" CYAN="" MAGENTA="" BLUE="" RESET=""
 fi
 
 # ── Logging & UI Helpers ──────────────────────────────────────────────────────
-info()    { printf '%b\n' "${CYAN}[INFO]${RESET} ${DIM}$*${RESET}"; }
-ok()      { printf '%b\n' "${GREEN}[OK]${RESET} $*"; }
-warn()    { printf '%b\n' "${YELLOW}[WARN]${RESET} $*"; }
-err()     { printf '%b\n' "${RED}[ERR]${RESET} $*" >&2; }
+info()    { printf "%b[INFO]%b %b%s%b\n" "$CYAN" "$RESET" "$DIM" "$*" "$RESET"; }
+ok()      { printf "%b[OK]%b   %s\n" "$GREEN" "$RESET" "$*"; }
+warn()    { printf "%b[WARN]%b %s\n" "$YELLOW" "$RESET" "$*"; }
+err()     { printf "%b[ERR]%b  %s\n" "$RED" "$RESET" "$*" >&2; }
 
 die() {
   {
     printf "\033[?25h" # Restore cursor
     if [[ $# -gt 0 ]]; then
-      printf '\n%b\n' "${RED}[ERR]${RESET} $*"
+      printf "\n%b[ERR]%b %s\n" "$RED" "$RESET" "$*"
     else
-      printf '\n%b\n' "${RED}[ERR]${RESET} Installation failed or was cancelled."
+      printf "\n%b[ERR]%b Installation failed or was cancelled.\n" "$RED" "$RESET"
     fi
   } >&2
   exit 1
 }
 
-divider() { printf '%b\n' "${DIM}────────────────────────────────────────────────────────────${RESET}"; }
+divider() { printf "%b────────────────────────────────────────────────────────────%b\n" "$DIM" "$RESET"; }
 
 banner() {
   cat << "EOF"
-    ___   ______  __  __
-   /   | / ____/ / \/ /
-  / /| |/ / __  /    / 
- / ___ / /_/ / / /  /  
-/_/  |_\____/ /_/ /_/   
+  \033[38;5;51m  ___   ______  __  __  \033[0m
+  \033[38;5;39m /   | / ____/ / \/ /  \033[0m
+  \033[38;5;82m/ /| |/ / __  /    /   \033[0m
+ \033[38;5;220m/ ___ / /_/ / / /  /    \033[0m
+\033[38;5;201m/_/  |_\____/ /_/ /_/     \033[0m
 Google Antigravity CLI (agy) - Termux Native Standalone Port
 EOF
 }
@@ -84,8 +86,28 @@ Options:
 Examples:
   curl -fsSL https://raw.githubusercontent.com/$REPO/main/agy.sh | bash
   ./agy.sh -y
-  ./agy.sh --check
+  ./agy.sh --force
 EOF
+}
+
+# ── Micro-Animation Spinner ──────────────────────────────────────────────────
+spin_wait() {
+  local pid=$1
+  local msg=$2
+  local delay=0.08
+  local spinstr="⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+  if [[ -t 1 ]]; then
+    printf "\033[?25l"
+    while kill -0 "$pid" 2>/dev/null; do
+      local temp=${spinstr#?}
+      printf "\r %b%s%b %s" "$CYAN" "${spinstr:0:1}" "$RESET" "$msg"
+      spinstr=$temp${spinstr%"$temp"}
+      sleep $delay
+    done
+    printf "\r\033[K\033[?25h"
+  else
+    wait "$pid" 2>/dev/null || true
+  fi
 }
 
 # ── Argument Parsing ──────────────────────────────────────────────────────────
@@ -163,30 +185,31 @@ resolve_dependencies() {
   command -v git >/dev/null 2>&1 || needed_pkgs+=("git")
   command -v rg >/dev/null 2>&1 || needed_pkgs+=("ripgrep")
 
-  # SSL certificates
+  # SSL certificates & DNS
   if [[ ! -f "${PREFIX:-/data/data/com.termux/files/usr}/etc/tls/cert.pem" ]]; then
     needed_pkgs+=("ca-certificates")
   fi
-
-  # Network DNS resolver
   if [[ ! -f "${PREFIX:-/data/data/com.termux/files/usr}/etc/resolv.conf" ]]; then
     needed_pkgs+=("resolv-conf")
   fi
 
   if [[ ${#needed_pkgs[@]} -gt 0 ]]; then
     info "Installing missing dependencies: ${needed_pkgs[*]}..."
-    pkg update -y >/dev/null 2>&1 || true
-    pkg install -y "${needed_pkgs[@]}" || warn "Failed to auto-install packages (${needed_pkgs[*]}). Proceeding..."
+    (pkg update -y >/dev/null 2>&1 || true; pkg install -y "${needed_pkgs[@]}" >/dev/null 2>&1) &
+    spin_wait $! "Resolving package dependencies..."
+    ok "Core system dependencies installed."
   else
     ok "All core dependencies satisfied."
   fi
 
-  # Glibc compatibility check
-  if [[ -d "${PREFIX:-/data/data/com.termux/files/usr}/glibc" ]]; then
-    ok "Termux glibc environment present."
+  # Auto-install glibc-repo, glibc-runner, and glibc
+  info "Checking glibc compatibility layer & glibc-runner..."
+  if ! dpkg -l | grep -q "glibc-runner" 2>/dev/null; then
+    (pkg update -y >/dev/null 2>&1 || true; pkg install -y glibc-repo glibc-runner glibc >/dev/null 2>&1 || true) &
+    spin_wait $! "Configuring glibc-repo & glibc-runner..."
+    ok "glibc-repo & glibc-runner configured."
   else
-    info "Checking glibc compatibility layer..."
-    pkg install -y glibc-repo glibc >/dev/null 2>&1 || warn "glibc package installation skipped or not found."
+    ok "glibc environment & glibc-runner ready."
   fi
 }
 
@@ -197,10 +220,10 @@ check_cpu_atomics() {
   arch="$(uname -m)"
   
   if [[ "$arch" != "aarch64" && "$arch" != "arm64" ]]; then
-    warn "32-bit userland or architecture '$arch' detected. agy is native to ARM64 (AArch64)."
-    info "Installing QEMU user-mode emulator for 64-bit binary execution..."
-    pkg update -y >/dev/null 2>&1 || true
-    pkg install -y qemu-user-aarch64 proot >/dev/null 2>&1 || warn "Failed to auto-install qemu-user-aarch64 / proot."
+    warn "32-bit userland or architecture '$arch' detected. agy is native to ARM64."
+    info "Installing QEMU user-mode emulator & proot fallback..."
+    (pkg update -y >/dev/null 2>&1 || true; pkg install -y qemu-user-aarch64 proot >/dev/null 2>&1 || true) &
+    spin_wait $! "Setting up QEMU user-mode emulator..."
     return 0
   fi
 
@@ -210,40 +233,63 @@ check_cpu_atomics() {
   else
     warn "CPU lacks ARM64 LSE atomics. Checking qemu-user-aarch64 emulation fallback..."
     if ! command -v qemu-aarch64 >/dev/null 2>&1; then
-      info "Installing qemu-user-aarch64 to enable compatibility on older CPUs..."
-      pkg install -y qemu-user-aarch64 proot >/dev/null 2>&1 || warn "Could not install qemu-user-aarch64."
+      (pkg install -y qemu-user-aarch64 proot >/dev/null 2>&1 || true) &
+      spin_wait $! "Installing qemu-user-aarch64..."
     fi
   fi
 }
 
-# ── Version Check ─────────────────────────────────────────────────────────────
+# ── Version & Smart Cache Manager ─────────────────────────────────────────────
+LATEST_TAG=""
+CURRENT_VER="none"
+CACHE_DIR="${PREFIX:-/data/data/com.termux/files/usr}/tmp/.agy-cache"
+
 check_version() {
   info "Querying latest release from $REPO..."
-  local latest_tag
-  latest_tag=$(curl -fsSL -H "User-Agent: Termux-Agy" "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null | rg -o '"tag_name"\s*:\s*"[^"]*' | cut -d'"' -f4 || echo "")
+  (curl -fsSL -H "User-Agent: Termux-Agy" "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null | rg -o '"tag_name"\s*:\s*"[^"]*' | cut -d'"' -f4 > "${PREFIX:-/data/data/com.termux/files/usr}/tmp/.latest_tag" || echo "") &
+  spin_wait $! "Fetching release metadata..."
+  
+  LATEST_TAG=$(cat "${PREFIX:-/data/data/com.termux/files/usr}/tmp/.latest_tag" 2>/dev/null || echo "")
+  rm -f "${PREFIX:-/data/data/com.termux/files/usr}/tmp/.latest_tag" 2>/dev/null || true
 
-  if [[ -z "$latest_tag" ]]; then
-    warn "Unable to query latest release tag from GitHub API."
-    return 0
-  fi
-
-  local current_ver="none"
   local bin_dir="${PREFIX:-/data/data/com.termux/files/usr}/bin"
   if [[ -x "$bin_dir/agy" ]]; then
-    current_ver=$("$bin_dir/agy" --version 2>/dev/null | head -n1 || echo "installed")
+    CURRENT_VER=$("$bin_dir/agy" --version 2>/dev/null | head -n1 || echo "installed")
   fi
 
   divider
-  ok "Latest Available Release : $latest_tag"
-  ok "Currently Installed       : $current_ver"
+  ok "Latest Available Release : ${LATEST_TAG:-unknown}"
+  ok "Currently Installed       : $CURRENT_VER"
   divider
 
   if [[ "$CHECK_ONLY" -eq 1 ]]; then
     exit 0
   fi
+
+  # Smart update check: If current version matches latest release tag and not forced
+  if [[ -n "$LATEST_TAG" && "$CURRENT_VER" == "$LATEST_TAG" && "$FORCE_INSTALL" -eq 0 ]]; then
+    if [[ "$NON_INTERACTIVE" -eq 1 ]]; then
+      ok "Antigravity CLI is already at the latest version ($LATEST_TAG). No update needed."
+      exit 0
+    else
+      printf "%bAntigravity CLI ($LATEST_TAG) is already installed.%b\n" "$BOLD$GREEN" "$RESET"
+      printf "%bWould you like to force reinstall? [y/N]: %b" "$BOLD$YELLOW" "$RESET"
+      read -r response || response="n"
+      case "$response" in
+        [yY][eE][sS]|[yY])
+          info "Force reinstall confirmed."
+          FORCE_INSTALL=1
+          ;;
+        *)
+          ok "Already up to date. Exiting cleanly."
+          exit 0
+          ;;
+      esac
+    fi
+  fi
 }
 
-# ── Download & Extract Binary ─────────────────────────────────────────────────
+# ── Download & Extract Binary (With Persistent Caching) ─────────────────────
 TMP_TARBALL=""
 TMP_EXTRACT_DIR=""
 AGY_INSTALL_SUCCESS=0
@@ -252,7 +298,6 @@ AGY_VA39_BAK_FILE=""
 
 cleanup() {
   [[ -n "${TMP_EXTRACT_DIR:-}" ]] && rm -rf "$TMP_EXTRACT_DIR" 2>/dev/null || true
-  [[ -n "${TMP_TARBALL:-}" ]] && rm -f "$TMP_TARBALL" 2>/dev/null || true
   
   if [[ "${AGY_INSTALL_SUCCESS:-0}" -ne 1 ]]; then
     local bin_dir="${PREFIX:-/data/data/com.termux/files/usr}/bin"
@@ -273,21 +318,39 @@ install_binary() {
   local install_bin_dir="${termux_prefix}/bin"
   local tmp_dir="${termux_prefix}/tmp"
   
-  TMP_TARBALL="${tmp_dir}/antigravity-termux-standalone.tar.gz"
+  mkdir -p "$tmp_dir" "$install_bin_dir" "$CACHE_DIR"
+  trap cleanup EXIT INT TERM
+
+  local tag="${LATEST_TAG:-latest}"
+  local cached_tarball="${CACHE_DIR}/antigravity-${tag}.tar.gz"
   TMP_EXTRACT_DIR="${tmp_dir}/.agy-extract"
   AGY_INSTALL_SUCCESS=0
 
-  mkdir -p "$tmp_dir" "$install_bin_dir"
-  trap cleanup EXIT INT TERM
+  # Check persistent cache file
+  if [[ -f "$cached_tarball" && $(wc -c < "$cached_tarball" 2>/dev/null || echo 0) -gt 1000000 && "$FORCE_INSTALL" -eq 0 ]]; then
+    ok "Using cached package: antigravity-${tag}.tar.gz"
+    TMP_TARBALL="$cached_tarball"
+  else
+    info "Downloading Antigravity CLI binary package (~49MB)..."
+    local download_url="$URL"
+    if [[ -n "$LATEST_TAG" ]]; then
+      download_url="https://github.com/$REPO/releases/download/$LATEST_TAG/antigravity-termux-standalone.tar.gz"
+    fi
 
-  # Query exact latest release tag for direct asset URL
-  info "Fetching release metadata from GitHub..."
-  local tag
-  tag=$(curl -fsSL -H "User-Agent: Termux-Agy" "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null | rg -o '"tag_name"\s*:\s*"[^"]*' | cut -d'"' -f4 || echo "")
-  
-  local download_url="$URL"
-  if [[ -n "$tag" ]]; then
-    download_url="https://github.com/$REPO/releases/download/$tag/antigravity-termux-standalone.tar.gz"
+    (
+      rm -f "$cached_tarball" 2>/dev/null || true
+      if ! curl -fsSL --retry 3 --retry-delay 2 -o "$cached_tarball" "$download_url" || [[ $(wc -c < "$cached_tarball" 2>/dev/null || echo 0) -lt 1000000 ]]; then
+        local fallback_url="https://github.com/wallentx/antigravity-cli-termux/releases/latest/download/antigravity-termux-standalone.tar.gz"
+        curl -fsSL --retry 3 --retry-delay 2 -o "$cached_tarball" "$fallback_url" || exit 1
+      fi
+    ) &
+    spin_wait $! "Downloading binary archive..."
+
+    if [[ ! -f "$cached_tarball" || $(wc -c < "$cached_tarball" 2>/dev/null || echo 0) -lt 1000000 ]]; then
+      die "Failed to download release tarball package."
+    fi
+    TMP_TARBALL="$cached_tarball"
+    ok "Release package downloaded and saved to cache."
   fi
 
   # Backup existing binaries
@@ -300,18 +363,10 @@ install_binary() {
     cp -f "$install_bin_dir/agy.va39" "$AGY_VA39_BAK_FILE"
   fi
 
-  info "Downloading Antigravity CLI standalone binary package (~49MB)..."
-  rm -f "$TMP_TARBALL" 2>/dev/null || true
-  
-  if ! curl -fsSL --retry 3 --retry-delay 2 -o "$TMP_TARBALL" "$download_url" || [[ $(wc -c < "$TMP_TARBALL" 2>/dev/null || echo 0) -lt 1000000 ]]; then
-    warn "Primary release asset unavailable or incomplete. Retrying from upstream release mirror..."
-    local fallback_url="https://github.com/wallentx/antigravity-cli-termux/releases/latest/download/antigravity-termux-standalone.tar.gz"
-    curl -fsSL --retry 3 --retry-delay 2 -o "$TMP_TARBALL" "$fallback_url" || die "Failed to download release tarball."
-  fi
-
   info "Extracting binaries..."
   mkdir -p "$TMP_EXTRACT_DIR"
-  tar -xzf "$TMP_TARBALL" -C "$TMP_EXTRACT_DIR" || die "Failed to extract release tarball."
+  (tar -xzf "$TMP_TARBALL" -C "$TMP_EXTRACT_DIR") &
+  spin_wait $! "Unpacking binaries..."
 
   if [[ ! -f "$TMP_EXTRACT_DIR/agy" ]]; then
     die "Extracted archive does not contain required 'agy' binary."
@@ -355,7 +410,7 @@ EOF
   ln -sf "$install_bin_dir/agy" "$HOME/bin/agy" 2>/dev/null || true
 
   AGY_INSTALL_SUCCESS=1
-  ok "Binaries successfully placed in $install_bin_dir/agy"
+  ok "Binaries successfully deployed to $install_bin_dir/agy"
   trap - EXIT INT TERM
   cleanup
 }

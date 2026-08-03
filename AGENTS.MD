@@ -51,3 +51,10 @@
 - **QEMU & PRoot Fallback**: Added auto-installation of `qemu-user-aarch64` and `proot`. Placed native 64-bit binary as `agy.native` and created a POSIX wrapper script at `$PREFIX/bin/agy` that dynamically invokes `qemu-aarch64 -L $PREFIX` when native 64-bit execution is unsupported by the OS kernel linker.
 - **Shell Alias & PATH Persistence**: Added automatic `PATH` exports and `alias agy="$PREFIX/bin/agy"` into `$HOME/.bashrc`, `$HOME/.zshrc`, `$HOME/.profile`, and symlinks in `$HOME/.local/bin/agy` and `$HOME/bin/agy`.
 
+### [2026-08-04] - Add glibc-runner Auto-Install, Smart Persistent Caching & Terminal Micro-Animations
+- **Glibc & Runner Auto-Provisioning**: Updated `resolve_dependencies()` to automatically install `glibc-repo`, `glibc-runner`, and `glibc` packages via Termux package manager.
+- **Smart Persistent Binary Caching**: Downloads are stored persistently in `$PREFIX/tmp/.agy-cache/antigravity-$TAG.tar.gz`. Subsequent script runs verify cached binary tarballs and skip re-downloading if already present.
+- **Interactive Force Reinstall Prompt**: If installed version matches latest release tag, `agy.sh` displays an interactive prompt asking `"Would you like to force reinstall? [y/N]"`. If user declines (or non-interactive mode is active without `-f`), script exits cleanly with zero redundant downloads.
+- **Terminal UI Micro-Animations**: Integrated animated terminal spinners (`spin_wait`) and 256-color palette styling during package resolution, downloading, and binary unpacking.
+
+
