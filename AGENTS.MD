@@ -57,4 +57,10 @@
 - **Interactive Force Reinstall Prompt**: If installed version matches latest release tag, `agy.sh` displays an interactive prompt asking `"Would you like to force reinstall? [y/N]"`. If user declines (or non-interactive mode is active without `-f`), script exits cleanly with zero redundant downloads.
 - **Terminal UI Micro-Animations**: Integrated animated terminal spinners (`spin_wait`) and 256-color palette styling during package resolution, downloading, and binary unpacking.
 
+### [2026-08-04] - Rewrite agy.sh: 64-Bit Native Default, Mandatory Glibc Fallback Pipeline & 32-Bit QEMU Scoping
+- **64-Bit Native Default Execution**: Configured `agy.sh` to install native 64-bit ELF binary directly into `$PREFIX/bin/agy` for default 64-bit Termux users (F-Droid / GitHub releases), running at native C performance with zero QEMU overhead.
+- **Mandatory Glibc Installation Pipeline**: Enhanced `resolve_dependencies()` to enforce glibc environment (`glibc-repo`, `glibc-runner`, `glibc`). Added automatic `apt-get` fallback if `pkg install` encounters repository mirror issues.
+- **Strict 32-Bit QEMU Scoping**: Scoped QEMU user-mode emulation wrapper strictly to legacy 32-bit Termux userlands (`armv7l`, `armv8l`, `i686`).
+
+
 

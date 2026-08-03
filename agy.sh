@@ -4,17 +4,16 @@
 # https://github.com/polymath-void/termux-antigravity-cli-agy
 # ==============================================================================
 # Features:
-# - Full automated dependency resolution (curl, tar, git, ripgrep, glibc-repo, glibc-runner, resolv-conf)
-# - Smart binary caching & version check (skip download if up to date, interactive force prompt)
-# - Hardware capability detection (ARM64 LSE atomics & 32-bit QEMU user-mode fallback)
-# - Zero-touch non-interactive mode (-y / --yes)
-# - Rich terminal micro-animations & vibrant color palette
+# - Native 64-bit Termux execution by default (F-Droid / GitHub Termux builds)
+# - Robust mandatory glibc & glibc-runner installation with fallback mirrors
+# - QEMU user-mode emulation fallback ONLY for 32-bit Play Store legacy userlands
+# - Smart binary caching & version check (skips download if up-to-date, interactive prompt)
+# - Rich terminal micro-animations & 256-color palette styling
 # - Shell profile environment & alias auto-integration (~/.bashrc / ~/.zshrc)
-# - Post-installation runtime health verification
 # ==============================================================================
 set -Eeuo pipefail
 
-SCRIPT_VERSION="1.3.0"
+SCRIPT_VERSION="1.4.0"
 REPO="${AGY_REPO:-polymath-void/termux-antigravity-cli-agy}"
 URL="${AGY_INSTALL_URL:-https://github.com/$REPO/releases/latest/download/antigravity-termux-standalone.tar.gz}"
 
@@ -174,7 +173,7 @@ EOF
   fi
 }
 
-# ── Dependency Resolution & Package Manager ──────────────────────────────────
+# ── Mandatory Glibc & Dependency Resolution (With Fallback Pipeline) ──────────
 resolve_dependencies() {
   info "Checking required Termux system packages..."
   local needed_pkgs=()
@@ -194,48 +193,58 @@ resolve_dependencies() {
   fi
 
   if [[ ${#needed_pkgs[@]} -gt 0 ]]; then
-    info "Installing missing dependencies: ${needed_pkgs[*]}..."
+    info "Installing missing core dependencies: ${needed_pkgs[*]}..."
     (pkg update -y >/dev/null 2>&1 || true; pkg install -y "${needed_pkgs[@]}" >/dev/null 2>&1) &
-    spin_wait $! "Resolving package dependencies..."
-    ok "Core system dependencies installed."
+    spin_wait $! "Installing core dependencies..."
+    ok "Core system dependencies satisfied."
   else
-    ok "All core dependencies satisfied."
+    ok "Core system dependencies satisfied."
   fi
 
-  # Auto-install glibc-repo, glibc-runner, and glibc
-  info "Checking glibc compatibility layer & glibc-runner..."
-  if ! dpkg -l | grep -q "glibc-runner" 2>/dev/null; then
-    (pkg update -y >/dev/null 2>&1 || true; pkg install -y glibc-repo glibc-runner glibc >/dev/null 2>&1 || true) &
-    spin_wait $! "Configuring glibc-repo & glibc-runner..."
-    ok "glibc-repo & glibc-runner configured."
+  # Mandatory Glibc & Glibc-Runner Installation Pipeline
+  info "Verifying mandatory glibc compatibility layer & glibc-runner..."
+  if dpkg -l | grep -q "glibc" 2>/dev/null || [[ -d "${PREFIX:-/data/data/com.termux/files/usr}/glibc" ]]; then
+    ok "Mandatory glibc environment & glibc-runner ready."
   else
-    ok "glibc environment & glibc-runner ready."
+    info "Installing glibc-repo and glibc-runner packages..."
+    (
+      pkg update -y >/dev/null 2>&1 || true
+      if ! pkg install -y glibc-repo glibc-runner glibc >/dev/null 2>&1; then
+        warn "Primary glibc package install failed. Attempting fallback via apt-get..."
+        apt-get update -y >/dev/null 2>&1 || true
+        apt-get install -y glibc-repo glibc-runner glibc >/dev/null 2>&1 || true
+      fi
+    ) &
+    spin_wait $! "Configuring mandatory glibc environment..."
+
+    if dpkg -l | grep -q "glibc" 2>/dev/null || [[ -d "${PREFIX:-/data/data/com.termux/files/usr}/glibc" ]]; then
+      ok "Mandatory glibc environment successfully installed."
+    else
+      warn "Glibc package installation returned warnings. Proceeding with Bionic fallback."
+    fi
   fi
 }
 
-# ── CPU Hardware Atomics & Bitness Detection ──────────────────────────────────
+# ── Hardware & Bitness Check (64-Bit Native Default, 32-Bit QEMU Fallback) ──
+IS_32BIT_USERLAND=0
+
 check_cpu_atomics() {
-  info "Validating CPU instruction set & userland bitness..."
+  info "Detecting hardware architecture & userland bitness..."
   local arch
   arch="$(uname -m)"
   
-  if [[ "$arch" != "aarch64" && "$arch" != "arm64" ]]; then
-    warn "32-bit userland or architecture '$arch' detected. agy is native to ARM64."
-    info "Installing QEMU user-mode emulator & proot fallback..."
-    (pkg update -y >/dev/null 2>&1 || true; pkg install -y qemu-user-aarch64 proot >/dev/null 2>&1 || true) &
-    spin_wait $! "Setting up QEMU user-mode emulator..."
-    return 0
-  fi
-
-  # Test for LSE atomics in cpuinfo
-  if grep -qi "atomics" /proc/cpuinfo 2>/dev/null; then
-    ok "ARM64 LSE atomic instructions supported natively."
+  if [[ "$arch" == "aarch64" || "$arch" == "arm64" || "$arch" == "x86_64" ]]; then
+    ok "Native 64-bit Termux environment detected ($arch)."
+    IS_32BIT_USERLAND=0
   else
-    warn "CPU lacks ARM64 LSE atomics. Checking qemu-user-aarch64 emulation fallback..."
-    if ! command -v qemu-aarch64 >/dev/null 2>&1; then
-      (pkg install -y qemu-user-aarch64 proot >/dev/null 2>&1 || true) &
-      spin_wait $! "Installing qemu-user-aarch64..."
-    fi
+    warn "Legacy 32-bit userland detected ($arch). QEMU AArch64 emulation fallback required."
+    IS_32BIT_USERLAND=1
+    info "Installing QEMU user-mode emulator for 32-bit legacy support..."
+    (
+      pkg update -y >/dev/null 2>&1 || true
+      pkg install -y qemu-user-aarch64 proot >/dev/null 2>&1 || true
+    ) &
+    spin_wait $! "Configuring QEMU user-mode emulator..."
   fi
 }
 
@@ -328,7 +337,7 @@ install_binary() {
 
   # Check persistent cache file
   if [[ -f "$cached_tarball" && $(wc -c < "$cached_tarball" 2>/dev/null || echo 0) -gt 1000000 && "$FORCE_INSTALL" -eq 0 ]]; then
-    ok "Using cached package: antigravity-${tag}.tar.gz"
+    ok "Using cached release package: antigravity-${tag}.tar.gz"
     TMP_TARBALL="$cached_tarball"
   else
     info "Downloading Antigravity CLI binary package (~49MB)..."
@@ -378,11 +387,12 @@ install_binary() {
     install -m 0755 "$TMP_EXTRACT_DIR/agy.va39" "$install_bin_dir/agy.va39"
   fi
 
-  # Test if native binary runs directly or requires 32-bit QEMU wrapper
-  if "$install_bin_dir/agy.native" --version >/dev/null 2>&1; then
-    ln -sf "$install_bin_dir/agy.native" "$install_bin_dir/agy"
+  # Default 64-Bit vs 32-Bit QEMU Setup
+  if [[ "$IS_32BIT_USERLAND" -eq 0 ]] && "$install_bin_dir/agy.native" --version >/dev/null 2>&1; then
+    ok "Deploying native 64-bit binary executable..."
+    install -m 0755 "$TMP_EXTRACT_DIR/agy" "$install_bin_dir/agy"
   else
-    info "Setting up QEMU user-mode emulation wrapper for 32-bit Termux userland..."
+    warn "Setting up QEMU user-mode emulation wrapper for legacy 32-bit userland..."
     cat << 'EOF' > "$install_bin_dir/agy"
 #!/data/data/com.termux/files/usr/bin/env bash
 export SSL_CERT_FILE="${SSL_CERT_FILE:-/data/data/com.termux/files/usr/etc/tls/cert.pem}"
@@ -458,7 +468,7 @@ verify_installation() {
     if "$bin_path" --version >/dev/null 2>&1 || "$bin_path" --help >/dev/null 2>&1; then
       ok "Binary execution test passed: agy is ready!"
     else
-      warn "Direct execution warning. Testing QEMU emulation mode..."
+      warn "Execution warning: Testing fallback emulation mode..."
     fi
     divider
     printf "%bGoogle Antigravity CLI (agy) installed successfully!%b\n" "$BOLD$GREEN" "$RESET"
