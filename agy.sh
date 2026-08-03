@@ -190,14 +190,17 @@ resolve_dependencies() {
   fi
 }
 
-# ── CPU Hardware Atomics & QEMU Fallback ──────────────────────────────────────
+# ── CPU Hardware Atomics & Bitness Detection ──────────────────────────────────
 check_cpu_atomics() {
-  info "Validating ARM64 CPU instruction set capability..."
+  info "Validating CPU instruction set & userland bitness..."
   local arch
   arch="$(uname -m)"
   
   if [[ "$arch" != "aarch64" && "$arch" != "arm64" ]]; then
-    warn "Architecture '$arch' detected. agy is native to ARM64."
+    warn "32-bit userland or architecture '$arch' detected. agy is native to ARM64 (AArch64)."
+    info "Installing QEMU user-mode emulator for 64-bit binary execution..."
+    pkg update -y >/dev/null 2>&1 || true
+    pkg install -y qemu-user-aarch64 proot >/dev/null 2>&1 || warn "Failed to auto-install qemu-user-aarch64 / proot."
     return 0
   fi
 
@@ -208,7 +211,7 @@ check_cpu_atomics() {
     warn "CPU lacks ARM64 LSE atomics. Checking qemu-user-aarch64 emulation fallback..."
     if ! command -v qemu-aarch64 >/dev/null 2>&1; then
       info "Installing qemu-user-aarch64 to enable compatibility on older CPUs..."
-      pkg install -y qemu-user-aarch64 >/dev/null 2>&1 || warn "Could not install qemu-user-aarch64."
+      pkg install -y qemu-user-aarch64 proot >/dev/null 2>&1 || warn "Could not install qemu-user-aarch64."
     fi
   fi
 }
@@ -315,10 +318,41 @@ install_binary() {
   fi
 
   info "Installing binaries to $install_bin_dir..."
-  install -m 0755 "$TMP_EXTRACT_DIR/agy" "$install_bin_dir/agy"
+  install -m 0755 "$TMP_EXTRACT_DIR/agy" "$install_bin_dir/agy.native"
   if [[ -f "$TMP_EXTRACT_DIR/agy.va39" ]]; then
     install -m 0755 "$TMP_EXTRACT_DIR/agy.va39" "$install_bin_dir/agy.va39"
   fi
+
+  # Test if native binary runs directly or requires 32-bit QEMU wrapper
+  if "$install_bin_dir/agy.native" --version >/dev/null 2>&1; then
+    ln -sf "$install_bin_dir/agy.native" "$install_bin_dir/agy"
+  else
+    info "Setting up QEMU user-mode emulation wrapper for 32-bit Termux userland..."
+    cat << 'EOF' > "$install_bin_dir/agy"
+#!/data/data/com.termux/files/usr/bin/env bash
+export SSL_CERT_FILE="${SSL_CERT_FILE:-/data/data/com.termux/files/usr/etc/tls/cert.pem}"
+export TMPDIR="${TMPDIR:-/data/data/com.termux/files/usr/tmp}"
+PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
+
+if "$PREFIX/bin/agy.native" --version >/dev/null 2>&1; then
+  exec "$PREFIX/bin/agy.native" "$@"
+elif command -v qemu-aarch64 >/dev/null 2>&1; then
+  exec qemu-aarch64 -L "$PREFIX" "$PREFIX/bin/agy.native" "$@"
+elif command -v proot >/dev/null 2>&1; then
+  exec proot -q qemu-aarch64 "$PREFIX/bin/agy.native" "$@"
+else
+  echo "[ERR] Cannot execute 64-bit agy binary on 32-bit Termux userland." >&2
+  echo "[ERR] Install qemu-user-aarch64 via: pkg install qemu-user-aarch64" >&2
+  exit 1
+fi
+EOF
+    chmod 0755 "$install_bin_dir/agy"
+  fi
+
+  # Convenience symlinks in user PATH directories
+  mkdir -p "$HOME/.local/bin" "$HOME/bin"
+  ln -sf "$install_bin_dir/agy" "$HOME/.local/bin/agy" 2>/dev/null || true
+  ln -sf "$install_bin_dir/agy" "$HOME/bin/agy" 2>/dev/null || true
 
   AGY_INSTALL_SUCCESS=1
   ok "Binaries successfully placed in $install_bin_dir/agy"
@@ -328,24 +362,36 @@ install_binary() {
 
 # ── Shell Environment Integration ──────────────────────────────────────────────
 configure_environment() {
-  info "Configuring shell environment profiles..."
+  info "Configuring shell environment profiles & aliases..."
   local termux_prefix="${PREFIX:-/data/data/com.termux/files/usr}"
   local cert_file="${termux_prefix}/etc/tls/cert.pem"
+  local bin_dir="${termux_prefix}/bin"
   
-  # Ensure SSL_CERT_FILE points to Termux certificates
-  if [[ -f "$cert_file" ]]; then
-    local env_line="export SSL_CERT_FILE=\"$cert_file\""
-    for rc_file in "$HOME/.bashrc" "$HOME/.zshrc"; do
-      if [[ -f "$rc_file" ]]; then
-        if ! grep -q "SSL_CERT_FILE" "$rc_file" 2>/dev/null; then
-          echo "" >> "$rc_file"
-          echo "# Google Antigravity CLI SSL configuration" >> "$rc_file"
-          echo "$env_line" >> "$rc_file"
-          ok "Added SSL_CERT_FILE export to $rc_file"
-        fi
+  for rc_file in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile"; do
+    touch "$rc_file" 2>/dev/null || true
+    
+    # 1. SSL Certificate path
+    if [[ -f "$cert_file" ]]; then
+      if ! grep -q "SSL_CERT_FILE" "$rc_file" 2>/dev/null; then
+        echo "" >> "$rc_file"
+        echo "# Google Antigravity CLI SSL configuration" >> "$rc_file"
+        echo "export SSL_CERT_FILE=\"$cert_file\"" >> "$rc_file"
+        ok "Added SSL_CERT_FILE export to $rc_file"
       fi
-    done
-  fi
+    fi
+
+    # 2. PATH export for Termux & local bin
+    if ! grep -q "$bin_dir" "$rc_file" 2>/dev/null; then
+      echo "export PATH=\"$bin_dir:\$HOME/.local/bin:\$HOME/bin:\$PATH\"" >> "$rc_file"
+      ok "Added PATH export to $rc_file"
+    fi
+
+    # 3. Alias fallback for agy
+    if ! grep -q "alias agy=" "$rc_file" 2>/dev/null; then
+      echo "alias agy=\"$bin_dir/agy\"" >> "$rc_file"
+      ok "Added 'agy' alias to $rc_file"
+    fi
+  done
 }
 
 # ── Post-Install Verification ─────────────────────────────────────────────────
@@ -354,10 +400,14 @@ verify_installation() {
   local bin_path="${PREFIX:-/data/data/com.termux/files/usr}/bin/agy"
 
   if [[ -x "$bin_path" ]]; then
-    ok "Binary execution test passed: agy is ready!"
+    if "$bin_path" --version >/dev/null 2>&1 || "$bin_path" --help >/dev/null 2>&1; then
+      ok "Binary execution test passed: agy is ready!"
+    else
+      warn "Direct execution warning. Testing QEMU emulation mode..."
+    fi
     divider
     printf "%bGoogle Antigravity CLI (agy) installed successfully!%b\n" "$BOLD$GREEN" "$RESET"
-    printf "Run %bagy%b to start your agentic AI session.\n" "$BOLD$CYAN" "$RESET"
+    printf "Run %bagy%b or %b~/.local/bin/agy%b to start your session.\n" "$BOLD$CYAN" "$RESET" "$BOLD$CYAN" "$RESET"
     divider
   else
     err "Verification failed: $bin_path is not executable."

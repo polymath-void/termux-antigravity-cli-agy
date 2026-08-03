@@ -45,3 +45,9 @@
 - **Repository Setup**:
   - Created `.gitignore` excluding `build_workspace/`, `dist/`, and build artifacts.
   - Created `AGENTS.MD` for agent context persistence.
+
+### [2026-08-04] - Fix 32-bit Termux Userland Emulation & Alias Auto-Configuration
+- **Root Cause Fix (`agy.sh`)**: Resolved `"agy is 64-bit instead of 32-bit"` error on 32-bit Termux userlands (`armv7l`, `armv8l`, `arm32`).
+- **QEMU & PRoot Fallback**: Added auto-installation of `qemu-user-aarch64` and `proot`. Placed native 64-bit binary as `agy.native` and created a POSIX wrapper script at `$PREFIX/bin/agy` that dynamically invokes `qemu-aarch64 -L $PREFIX` when native 64-bit execution is unsupported by the OS kernel linker.
+- **Shell Alias & PATH Persistence**: Added automatic `PATH` exports and `alias agy="$PREFIX/bin/agy"` into `$HOME/.bashrc`, `$HOME/.zshrc`, `$HOME/.profile`, and symlinks in `$HOME/.local/bin/agy` and `$HOME/bin/agy`.
+
