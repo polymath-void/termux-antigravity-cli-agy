@@ -19,12 +19,16 @@ echo "[BUILD] Fetching upstream Antigravity standalone release binary..."
 UPSTREAM_TARBALL="$BUILD_DIR/upstream.tar.gz"
 
 # Primary & Fallback Upstream URLs
-URL1="https://github.com/wallentx/antigravity-cli-termux/releases/latest/download/antigravity-termux-standalone.tar.gz"
-URL2="https://antigravity.google/cli/downloads/antigravity-linux-arm64.tar.gz"
+URL1="https://github.com/polymath-void/termux-antigravity-cli-agy/releases/latest/download/antigravity-termux-standalone.tar.gz"
+URL2="https://github.com/wallentx/antigravity-cli-termux/releases/latest/download/antigravity-termux-standalone.tar.gz"
+URL3="https://antigravity.google/cli/downloads/antigravity-linux-arm64.tar.gz"
 
 if ! curl -fsSL --retry 3 --retry-delay 2 -o "$UPSTREAM_TARBALL" "$URL1"; then
   echo "[BUILD] Warning: Primary upstream URL failed, trying secondary URL..."
-  curl -fsSL --retry 3 --retry-delay 2 -o "$UPSTREAM_TARBALL" "$URL2" || true
+  if ! curl -fsSL --retry 3 --retry-delay 2 -o "$UPSTREAM_TARBALL" "$URL2"; then
+    echo "[BUILD] Warning: Secondary upstream URL failed, trying Google direct URL..."
+    curl -fsSL --retry 3 --retry-delay 2 -o "$UPSTREAM_TARBALL" "$URL3" || true
+  fi
 fi
 
 if [[ -f "$UPSTREAM_TARBALL" && -s "$UPSTREAM_TARBALL" ]]; then

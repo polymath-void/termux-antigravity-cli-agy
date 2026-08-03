@@ -52,6 +52,18 @@ int main(int argc, char *argv[]) {
         }
     }
 
+    /* Ensure TMPDIR is set */
+    if (!getenv("TMPDIR")) {
+        char *prefix = getenv("PREFIX");
+        if (prefix) {
+            char tmp_path[PATH_MAX];
+            snprintf(tmp_path, sizeof(tmp_path), "%s/tmp", prefix);
+            setenv("TMPDIR", tmp_path, 1);
+        } else if (access("/data/data/com.termux/files/usr/tmp", F_OK) == 0) {
+            setenv("TMPDIR", "/data/data/com.termux/files/usr/tmp", 1);
+        }
+    }
+
     /* Build execv arguments */
     char **new_argv = malloc((argc + 1) * sizeof(char *));
     if (!new_argv) {
