@@ -299,7 +299,12 @@ install_binary() {
 
   info "Downloading Antigravity CLI standalone binary package (~49MB)..."
   rm -f "$TMP_TARBALL" 2>/dev/null || true
-  curl -fsSL --retry 3 --retry-delay 2 -o "$TMP_TARBALL" "$download_url" || die "Failed to download release tarball from $download_url."
+  
+  if ! curl -fsSL --retry 3 --retry-delay 2 -o "$TMP_TARBALL" "$download_url" || [[ $(wc -c < "$TMP_TARBALL" 2>/dev/null || echo 0) -lt 1000000 ]]; then
+    warn "Primary release asset unavailable or incomplete. Retrying from upstream release mirror..."
+    local fallback_url="https://github.com/wallentx/antigravity-cli-termux/releases/latest/download/antigravity-termux-standalone.tar.gz"
+    curl -fsSL --retry 3 --retry-delay 2 -o "$TMP_TARBALL" "$fallback_url" || die "Failed to download release tarball."
+  fi
 
   info "Extracting binaries..."
   mkdir -p "$TMP_EXTRACT_DIR"
