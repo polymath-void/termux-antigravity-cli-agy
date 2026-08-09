@@ -390,7 +390,16 @@ install_binary() {
   fi
 
   # Default 64-Bit vs 32-Bit QEMU Setup
-  if [[ "$IS_32BIT_USERLAND" -eq 0 ]] && "$install_bin_dir/agy.native" --version >/dev/null 2>&1; then
+  if [[ "$IS_32BIT_USERLAND" -eq 0 ]] && command -v glibc-runner >/dev/null 2>&1; then
+    ok "Deploying native 64-bit binary with glibc-runner..."
+    cat << EOF > "$install_bin_dir/agy"
+#!/data/data/com.termux/files/usr/bin/env bash
+export SSL_CERT_FILE="\${SSL_CERT_FILE:-/data/data/com.termux/files/usr/etc/tls/cert.pem}"
+export TMPDIR="\${TMPDIR:-/data/data/com.termux/files/usr/tmp}"
+exec glibc-runner "$install_bin_dir/agy.native" "\$@"
+EOF
+    chmod 0755 "$install_bin_dir/agy"
+  elif [[ "$IS_32BIT_USERLAND" -eq 0 ]] && "$install_bin_dir/agy.native" --version >/dev/null 2>&1; then
     ok "Deploying native 64-bit binary executable..."
     install -m 0755 "$TMP_EXTRACT_DIR/agy" "$install_bin_dir/agy"
   else
@@ -401,15 +410,17 @@ export SSL_CERT_FILE="${SSL_CERT_FILE:-/data/data/com.termux/files/usr/etc/tls/c
 export TMPDIR="${TMPDIR:-/data/data/com.termux/files/usr/tmp}"
 PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
 
-if "$PREFIX/bin/agy.native" --version >/dev/null 2>&1; then
+if command -v glibc-runner >/dev/null 2>&1 && "$PREFIX/bin/agy.native" --version >/dev/null 2>&1; then
+  exec glibc-runner "$PREFIX/bin/agy.native" "$@"
+elif "$PREFIX/bin/agy.native" --version >/dev/null 2>&1; then
   exec "$PREFIX/bin/agy.native" "$@"
 elif command -v qemu-aarch64 >/dev/null 2>&1; then
   exec qemu-aarch64 -L "$PREFIX" "$PREFIX/bin/agy.native" "$@"
 elif command -v proot >/dev/null 2>&1; then
   exec proot -q qemu-aarch64 "$PREFIX/bin/agy.native" "$@"
 else
-  echo "[ERR] Cannot execute 64-bit agy binary on 32-bit Termux userland." >&2
-  echo "[ERR] Install qemu-user-aarch64 via: pkg install qemu-user-aarch64" >&2
+  echo "[ERR] Cannot execute 64-bit agy binary." >&2
+  echo "[ERR] Install qemu-user-aarch64 or glibc-runner via: pkg install qemu-user-aarch64 glibc-runner" >&2
   exit 1
 fi
 EOF

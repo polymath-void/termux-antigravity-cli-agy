@@ -57,8 +57,8 @@
 - **Interactive Force Reinstall Prompt**: If installed version matches latest release tag, `agy.sh` displays an interactive prompt asking `"Would you like to force reinstall? [y/N]"`. If user declines (or non-interactive mode is active without `-f`), script exits cleanly with zero redundant downloads.
 - **Terminal UI Micro-Animations**: Integrated animated terminal spinners (`spin_wait`) and 256-color palette styling during package resolution, downloading, and binary unpacking.
 
-### [2026-08-09] - Fix Architecture Detection: Default to 64-Bit Userland
-- **Fix (`agy.sh`)**: Improved architecture detection in `check_cpu_atomics` by adding a mandatory check for `getconf LONG_BIT`. This ensures native 64-bit execution is prioritized on 64-bit userlands, limiting QEMU emulation strictly to 32-bit environments (e.g., Play Store Termux on certain devices), fixing the issue where it was defaulting to 32-bit unnecessarily.
+### [2026-08-09] - Fix Native Binary Execution: Glibc-Runner Integration
+- **Fix (`agy.sh`)**: The native 64-bit binary was found to be glibc-linked, causing execution failure on native Termux (Bionic). Updated the binary deployment logic to prioritize `glibc-runner` for execution on 64-bit environments, ensuring correct binary invocation. Updated the QEMU fallback wrapper to also attempt `glibc-runner` first.
 
 
 
