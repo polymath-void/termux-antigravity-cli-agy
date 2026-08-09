@@ -232,12 +232,14 @@ check_cpu_atomics() {
   info "Detecting hardware architecture & userland bitness..."
   local arch
   arch="$(uname -m)"
+  local long_bit
+  long_bit="$(getconf LONG_BIT)"
   
-  if [[ "$arch" == "aarch64" || "$arch" == "arm64" || "$arch" == "x86_64" ]]; then
-    ok "Native 64-bit Termux environment detected ($arch)."
+  if [[ ("$arch" == "aarch64" || "$arch" == "arm64" || "$arch" == "x86_64") && "$long_bit" == "64" ]]; then
+    ok "Native 64-bit Termux environment detected ($arch, $long_bit-bit)."
     IS_32BIT_USERLAND=0
   else
-    warn "Legacy 32-bit userland detected ($arch). QEMU AArch64 emulation fallback required."
+    warn "32-bit userland or incompatible architecture detected ($arch, $long_bit-bit). QEMU AArch64 emulation fallback required."
     IS_32BIT_USERLAND=1
     info "Installing QEMU user-mode emulator for 32-bit legacy support..."
     (
