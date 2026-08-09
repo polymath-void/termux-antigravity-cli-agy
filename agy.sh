@@ -394,9 +394,10 @@ install_binary() {
     ok "Deploying native 64-bit binary with glibc-runner..."
     cat << EOF > "$install_bin_dir/agy"
 #!/data/data/com.termux/files/usr/bin/env bash
+unset LD_PRELOAD
 export SSL_CERT_FILE="\${SSL_CERT_FILE:-/data/data/com.termux/files/usr/etc/tls/cert.pem}"
 export TMPDIR="\${TMPDIR:-/data/data/com.termux/files/usr/tmp}"
-exec glibc-runner "$install_bin_dir/agy.native" "\$@"
+exec glibc-runner "$install_bin_dir/agy.va39" "\$@"
 EOF
     chmod 0755 "$install_bin_dir/agy"
   elif [[ "$IS_32BIT_USERLAND" -eq 0 ]] && "$install_bin_dir/agy.native" --version >/dev/null 2>&1; then
@@ -406,18 +407,17 @@ EOF
     warn "Setting up QEMU user-mode emulation wrapper for legacy 32-bit userland..."
     cat << 'EOF' > "$install_bin_dir/agy"
 #!/data/data/com.termux/files/usr/bin/env bash
+unset LD_PRELOAD
 export SSL_CERT_FILE="${SSL_CERT_FILE:-/data/data/com.termux/files/usr/etc/tls/cert.pem}"
 export TMPDIR="${TMPDIR:-/data/data/com.termux/files/usr/tmp}"
 PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
 
-if command -v glibc-runner >/dev/null 2>&1 && "$PREFIX/bin/agy.native" --version >/dev/null 2>&1; then
-  exec glibc-runner "$PREFIX/bin/agy.native" "$@"
-elif "$PREFIX/bin/agy.native" --version >/dev/null 2>&1; then
-  exec "$PREFIX/bin/agy.native" "$@"
+if command -v glibc-runner >/dev/null 2>&1; then
+  exec glibc-runner "$PREFIX/bin/agy.va39" "$@"
 elif command -v qemu-aarch64 >/dev/null 2>&1; then
-  exec qemu-aarch64 -L "$PREFIX" "$PREFIX/bin/agy.native" "$@"
+  exec qemu-aarch64 -L "$PREFIX" "$PREFIX/bin/agy.va39" "$@"
 elif command -v proot >/dev/null 2>&1; then
-  exec proot -q qemu-aarch64 "$PREFIX/bin/agy.native" "$@"
+  exec proot -q qemu-aarch64 "$PREFIX/bin/agy.va39" "$@"
 else
   echo "[ERR] Cannot execute 64-bit agy binary." >&2
   echo "[ERR] Install qemu-user-aarch64 or glibc-runner via: pkg install qemu-user-aarch64 glibc-runner" >&2

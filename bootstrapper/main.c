@@ -30,6 +30,17 @@ int main(int argc, char *argv[]) {
     snprintf(target_bin, sizeof(target_bin), "%s/agy.va39", dir);
 
     if (access(target_bin, F_OK) != 0) {
+        /* Fallback: If running under glibc-runner (ld.so), dirname(exe_path) resolves to /usr/glibc/lib
+           We should fallback to checking the standard Termux bin path */
+        char *prefix = getenv("PREFIX");
+        if (prefix) {
+            snprintf(target_bin, sizeof(target_bin), "%s/bin/agy.va39", prefix);
+        } else {
+            snprintf(target_bin, sizeof(target_bin), "/data/data/com.termux/files/usr/bin/agy.va39");
+        }
+    }
+
+    if (access(target_bin, F_OK) != 0) {
         fprintf(stderr, "[agy-bootstrapper] Error: Core engine binary '%s' not found.\n", target_bin);
         fprintf(stderr, "Ensure both 'agy' and 'agy.va39' reside in the same directory.\n");
         return 1;
