@@ -395,6 +395,7 @@ install_binary() {
     cat << EOF > "$install_bin_dir/agy"
 #!/data/data/com.termux/files/usr/bin/env bash
 unset LD_PRELOAD
+export GODEBUG=netdns=cgo
 export SSL_CERT_FILE="\${SSL_CERT_FILE:-/data/data/com.termux/files/usr/etc/tls/cert.pem}"
 export TMPDIR="\${TMPDIR:-/data/data/com.termux/files/usr/tmp}"
 exec glibc-runner "$install_bin_dir/agy.va39" "\$@"
@@ -408,6 +409,7 @@ EOF
     cat << 'EOF' > "$install_bin_dir/agy"
 #!/data/data/com.termux/files/usr/bin/env bash
 unset LD_PRELOAD
+export GODEBUG=netdns=cgo
 export SSL_CERT_FILE="${SSL_CERT_FILE:-/data/data/com.termux/files/usr/etc/tls/cert.pem}"
 export TMPDIR="${TMPDIR:-/data/data/com.termux/files/usr/tmp}"
 PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"

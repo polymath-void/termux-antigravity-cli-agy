@@ -57,10 +57,11 @@
 - **Interactive Force Reinstall Prompt**: If installed version matches latest release tag, `agy.sh` displays an interactive prompt asking `"Would you like to force reinstall? [y/N]"`. If user declines (or non-interactive mode is active without `-f`), script exits cleanly with zero redundant downloads.
 - **Terminal UI Micro-Animations**: Integrated animated terminal spinners (`spin_wait`) and 256-color palette styling during package resolution, downloading, and binary unpacking.
 
-### [2026-08-09] - Fix Native Binary Execution: Glibc-Runner Integration & Path Resolution
+### [2026-08-09] - Fix Native Binary Execution: Glibc-Runner Integration, Path Resolution & Go DNS Resolver Fix
 - **Fix (`agy.sh`)**: The native 64-bit binary was found to be glibc-linked, causing execution failure on native Termux (Bionic). Updated the binary deployment logic to generate a Bash wrapper that invokes the core engine (`agy.va39`) directly using `glibc-runner`. This bypasses the C bootstrapper (`agy.native`) which suffers from path resolution issues under `glibc-runner` (where `/proc/self/exe` evaluates to `ld.so` in `/usr/glibc/lib/`).
 - **Bootstrapper Fix (`bootstrapper/main.c`)**: Added robust fallback path resolution to look in `$PREFIX/bin/agy.va39` if `agy.va39` is not found relative to `/proc/self/exe`. This ensures that even if the bootstrapper is executed via `glibc-runner`, it can find the engine.
-- **Verification**: Verified that `glibc-runner` successfully launches `agy.va39` directly, returning correct execution output (`1.1.10`).
+- **Go DNS Resolver Fix (`agy.sh`)**: Added `export GODEBUG=netdns=cgo` to the wrappers. This forces the Go runtime in the dynamically linked `agy.va39` binary to use glibc's `getaddrinfo` (which correctly reads the glibc-prefixed `/etc/resolv.conf`) instead of Go's native resolver (which incorrectly defaults to `[::1]:53` and fails inside Termux because `/etc/resolv.conf` is missing from the Android filesystem root).
+- **Verification**: Verified that `glibc-runner` successfully launches `agy.va39` directly, returning correct execution output (`1.1.10`). Also verified that the DNS is properly resolved inside the glibc environment.
 
 
 
