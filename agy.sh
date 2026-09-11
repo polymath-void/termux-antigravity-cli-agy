@@ -130,7 +130,7 @@ parse_args() {
         shift
         ;;
       -u|--update)
-        FORCE_INSTALL=0
+        FORCE_INSTALL=1
         shift
         ;;
       -v|--version)
@@ -201,26 +201,39 @@ resolve_dependencies() {
     ok "Core system dependencies satisfied."
   fi
 
-  # Mandatory Glibc & Glibc-Runner Installation Pipeline
-  info "Verifying mandatory glibc compatibility layer & glibc-runner..."
-  if dpkg -l | grep -q "glibc" 2>/dev/null || [[ -d "${PREFIX:-/data/data/com.termux/files/usr}/glibc" ]]; then
-    ok "Mandatory glibc environment & glibc-runner ready."
+  # Mandatory Glibc Compatibility Layer & Dynamic Loader Pipeline
+  info "Verifying mandatory glibc compatibility layer & dynamic loader..."
+  local glibc_dir="${PREFIX:-/data/data/com.termux/files/usr}/glibc"
+  local glibc_lib="$glibc_dir/lib"
+  local has_loader=0
+
+  if [[ -f "$glibc_lib/ld-linux-aarch64.so.1" || -f "$glibc_lib/ld.so" || -f "$glibc_lib/ld-linux-x86-64.so.2" || -f "$glibc_dir/bin/ld.so" ]]; then
+    has_loader=1
+    chmod 0755 "$glibc_lib"/ld* "$glibc_dir"/bin/ld* 2>/dev/null || true
+  fi
+
+  if [[ "$has_loader" -eq 1 ]]; then
+    ok "Mandatory glibc environment & dynamic loader ready."
   else
-    info "Installing glibc-repo and glibc-runner packages..."
+    info "Installing glibc-repo and glibc packages..."
     (
       pkg update -y >/dev/null 2>&1 || true
-      if ! pkg install -y glibc-repo glibc-runner glibc >/dev/null 2>&1; then
+      if ! pkg install -y glibc-repo glibc glibc-runner >/dev/null 2>&1; then
         warn "Primary glibc package install failed. Attempting fallback via apt-get..."
         apt-get update -y >/dev/null 2>&1 || true
-        apt-get install -y glibc-repo glibc-runner glibc >/dev/null 2>&1 || true
+        apt-get install -y glibc-repo glibc glibc-runner >/dev/null 2>&1 || true
       fi
+      chmod 0755 "$glibc_lib"/ld* "$glibc_dir"/bin/ld* 2>/dev/null || true
     ) &
     spin_wait $! "Configuring mandatory glibc environment..."
 
-    if dpkg -l | grep -q "glibc" 2>/dev/null || [[ -d "${PREFIX:-/data/data/com.termux/files/usr}/glibc" ]]; then
+    if [[ -f "$glibc_lib/ld-linux-aarch64.so.1" || -f "$glibc_lib/ld.so" || -f "$glibc_lib/ld-linux-x86-64.so.2" || -f "$glibc_dir/bin/ld.so" ]]; then
+      chmod 0755 "$glibc_lib"/ld* "$glibc_dir"/bin/ld* 2>/dev/null || true
       ok "Mandatory glibc environment successfully installed."
+    elif dpkg -l | grep -q "glibc" 2>/dev/null; then
+      ok "Glibc package detected in system."
     else
-      warn "Glibc package installation returned warnings. Proceeding with Bionic fallback."
+      warn "Glibc package installation returned warnings. Proceeding with fallback."
     fi
   fi
 }
@@ -278,7 +291,9 @@ check_version() {
   fi
 
   # Smart update check: If current version matches latest release tag and not forced
-  if [[ -n "$LATEST_TAG" && "$CURRENT_VER" == "$LATEST_TAG" && "$FORCE_INSTALL" -eq 0 ]]; then
+  local clean_latest="${LATEST_TAG#v}"
+  local clean_current="${CURRENT_VER#v}"
+  if [[ -n "$clean_latest" && "$clean_current" == "$clean_latest" && "$FORCE_INSTALL" -eq 0 ]]; then
     if [[ "$NON_INTERACTIVE" -eq 1 ]]; then
       ok "Antigravity CLI is already at the latest version ($LATEST_TAG). No update needed."
       exit 0
@@ -351,7 +366,7 @@ install_binary() {
     (
       rm -f "$cached_tarball" 2>/dev/null || true
       if ! curl -fsSL --retry 3 --retry-delay 2 -o "$cached_tarball" "$download_url" || [[ $(wc -c < "$cached_tarball" 2>/dev/null || echo 0) -lt 1000000 ]]; then
-        local fallback_url="https://github.com/wallentx/antigravity-cli-termux/releases/latest/download/antigravity-termux-standalone.tar.gz"
+        local fallback_url="https://github.com/$REPO/releases/latest/download/antigravity-termux-standalone.tar.gz"
         curl -fsSL --retry 3 --retry-delay 2 -o "$cached_tarball" "$fallback_url" || exit 1
       fi
     ) &
@@ -389,23 +404,25 @@ install_binary() {
     install -m 0755 "$TMP_EXTRACT_DIR/agy.va39" "$install_bin_dir/agy.va39"
   fi
 
-  # Default 64-Bit vs 32-Bit QEMU Setup
-  if [[ "$IS_32BIT_USERLAND" -eq 0 ]] && command -v glibc-runner >/dev/null 2>&1; then
-    ok "Deploying native 64-bit binary with glibc-runner..."
-    cat << EOF > "$install_bin_dir/agy"
-#!/data/data/com.termux/files/usr/bin/env bash
-unset LD_PRELOAD
-export GODEBUG=netdns=cgo
-export SSL_CERT_FILE="\${SSL_CERT_FILE:-/data/data/com.termux/files/usr/etc/tls/cert.pem}"
-export TMPDIR="\${TMPDIR:-/data/data/com.termux/files/usr/tmp}"
-exec glibc-runner "$install_bin_dir/agy.va39" "\$@"
-EOF
-    chmod 0755 "$install_bin_dir/agy"
-  elif [[ "$IS_32BIT_USERLAND" -eq 0 ]] && "$install_bin_dir/agy.native" --version >/dev/null 2>&1; then
+  # Compile local bootstrapper if C source is present
+  local script_dir
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  if [[ -f "$script_dir/bootstrapper/main.c" ]] && command -v gcc >/dev/null 2>&1; then
+    info "Compiling native Bionic C bootstrapper launcher..."
+    if gcc -O2 -Wall "$script_dir/bootstrapper/main.c" -o "$TMP_EXTRACT_DIR/agy.bootstrapper" 2>/dev/null; then
+      if "$TMP_EXTRACT_DIR/agy.bootstrapper" --version >/dev/null 2>&1; then
+        cp -f "$TMP_EXTRACT_DIR/agy.bootstrapper" "$TMP_EXTRACT_DIR/agy"
+        ok "Native bootstrapper launcher compiled and verified."
+      fi
+    fi
+  fi
+
+  # Deploy binary executable or intelligent dynamic loader wrapper
+  if [[ "$IS_32BIT_USERLAND" -eq 0 ]] && "$TMP_EXTRACT_DIR/agy" --version >/dev/null 2>&1; then
     ok "Deploying native 64-bit binary executable..."
     install -m 0755 "$TMP_EXTRACT_DIR/agy" "$install_bin_dir/agy"
   else
-    warn "Setting up QEMU user-mode emulation wrapper for legacy 32-bit userland..."
+    ok "Deploying dynamic glibc loader launcher..."
     cat << 'EOF' > "$install_bin_dir/agy"
 #!/data/data/com.termux/files/usr/bin/env bash
 unset LD_PRELOAD
@@ -414,15 +431,31 @@ export SSL_CERT_FILE="${SSL_CERT_FILE:-/data/data/com.termux/files/usr/etc/tls/c
 export TMPDIR="${TMPDIR:-/data/data/com.termux/files/usr/tmp}"
 PREFIX="${PREFIX:-/data/data/com.termux/files/usr}"
 
-if command -v glibc-runner >/dev/null 2>&1; then
-  exec glibc-runner "$PREFIX/bin/agy.va39" "$@"
+GLIBC_LIB="$PREFIX/glibc/lib"
+TARGET="$PREFIX/bin/agy.va39"
+
+LOADER=""
+if [[ -f "$GLIBC_LIB/ld-linux-aarch64.so.1" ]]; then
+  LOADER="$GLIBC_LIB/ld-linux-aarch64.so.1"
+elif [[ -f "$GLIBC_LIB/ld.so" ]]; then
+  LOADER="$GLIBC_LIB/ld.so"
+elif [[ -f "$GLIBC_LIB/ld-linux-x86-64.so.2" ]]; then
+  LOADER="$GLIBC_LIB/ld-linux-x86-64.so.2"
+elif [[ -f "$PREFIX/glibc/bin/ld.so" ]]; then
+  LOADER="$PREFIX/glibc/bin/ld.so"
+fi
+
+if [[ -n "$LOADER" ]]; then
+  exec "$LOADER" --library-path "$GLIBC_LIB" "$TARGET" "$@"
+elif command -v glibc-runner >/dev/null 2>&1; then
+  exec glibc-runner "$TARGET" "$@"
 elif command -v qemu-aarch64 >/dev/null 2>&1; then
-  exec qemu-aarch64 -L "$PREFIX" "$PREFIX/bin/agy.va39" "$@"
+  exec qemu-aarch64 -L "$PREFIX" "$TARGET" "$@"
 elif command -v proot >/dev/null 2>&1; then
-  exec proot -q qemu-aarch64 "$PREFIX/bin/agy.va39" "$@"
+  exec proot -q qemu-aarch64 "$TARGET" "$@"
 else
-  echo "[ERR] Cannot execute 64-bit agy binary." >&2
-  echo "[ERR] Install qemu-user-aarch64 or glibc-runner via: pkg install qemu-user-aarch64 glibc-runner" >&2
+  echo "[ERR] Cannot execute Antigravity CLI binary." >&2
+  echo "[ERR] Missing glibc loader. Run: pkg install -y glibc-repo glibc" >&2
   exit 1
 fi
 EOF

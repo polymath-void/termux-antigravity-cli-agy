@@ -63,5 +63,21 @@
 - **Go DNS Resolver Fix (`agy.sh`)**: Added `export GODEBUG=netdns=cgo` to the wrappers. This forces the Go runtime in the dynamically linked `agy.va39` binary to use glibc's `getaddrinfo` (which correctly reads the glibc-prefixed `/etc/resolv.conf`) instead of Go's native resolver (which incorrectly defaults to `[::1]:53` and fails inside Termux because `/etc/resolv.conf` is missing from the Android filesystem root).
 - **Verification**: Verified that `glibc-runner` successfully launches `agy.va39` directly, returning correct execution output (`1.1.10`). Also verified that the DNS is properly resolved inside the glibc environment.
 
+### [2026-09-11] - Fix Glibc Dynamic Linker (ld.so) Execution and Update/Install Failures
+- **Dynamic Linker Resolution in Bootstrapper (`bootstrapper/main.c`)**: Updated the native Bionic C launcher to automatically inspect `$PREFIX/glibc/lib/` for the architecture dynamic loader (`ld-linux-aarch64.so.1`, `ld.so`, `ld-linux-x86-64.so.2`). When found, it executes the glibc loader with `--library-path $PREFIX/glibc/lib` directly into `agy.va39`, eliminating the previous `cannot execute: required file not found` failure during direct `execv` calls and ensuring release binaries pass `--help` validation in upstream self-update pipelines.
+- **Removed Duplicate Linker in Wrapper (`agy.sh`)**: Eliminated erroneous `glibc-runner <ld-linux.so> --library-path ...` calls which caused `loader cannot load itself` errors due to `glibc-runner` wrapping an already-invoked `ld.so`.
+- **Dynamic Glibc Loader Launcher**: Added native binary compilation of `bootstrapper/main.c` on install, and generated a robust dynamic loader wrapper that dispatches directly via `$PREFIX/glibc/lib/ld*` with fallback to `glibc-runner` and `qemu-aarch64`.
+- **Permissions and Dependency Verification**: Added automated detection of dynamic loader existence and enforced `chmod 0755` on `$PREFIX/glibc/lib/ld*` so unprivileged/restricted file extractions do not cause `Permission denied` during execution.
+- **Update Flag Fix**: Updated `-u|--update` in `agy.sh` to enforce `FORCE_INSTALL=1` to ensure updates download cleanly when triggered.
+
+### [2026-09-11] - Fix Workflow Stale Binary Loop & Migrate to Official Google Release
+- **Fixed Stale Self-Referential Download Loop (`scripts/build_standalone.sh`)**: The build pipeline previously defined `URL1` as `polymath-void/termux-antigravity-cli-agy/releases/latest/download/...`. This caused GitHub Actions to continuously download the repo's own old release (stuck on 1.1.10) instead of fetching updates from Google. Removed self-referential downloads completely.
+- **Official Google Antigravity Manifest Integration**: Rewrote `scripts/build_standalone.sh` to query the official Google auto-updater endpoint (`https://antigravity-cli-auto-updater-974169037036.us-central1.run.app/manifests/linux_arm64.json`) and retrieve the official Linux ARM64 binary archive (`cli_linux_arm64.tar.gz`) directly from Google Cloud Storage.
+- **Automated Termux Compatibility Patcher (`scripts/patch_va39.py` & `scripts/patch_va39_rules.json`)**: Built a binary patcher that transforms the official Google `antigravity` build into `agy.va39` by replacing the `faccessat2` syscall (439 / `0x1b7`) with `faccessat` (48 / `0x30`) to eliminate Android kernel/seccomp `SIGSYS` crashes, and adjusting TCMalloc VA48 address-space bits to VA39 for Android ARM64 hardware compatibility.
+- **Semantic Versioning in Release Workflow (`.github/workflows/sync-and-release.yml`)**: Updated the GitHub Actions workflow to extract the exact upstream version from `dist/VERSION` (e.g. `1.2.1`), tagging releases as `v${VERSION}` and setting `make_latest: true`.
+- **Version Normalization in Installer (`agy.sh`)**: Normalized versions in `check_version()` by stripping leading `v` prefixes to ensure accurate comparison between installed versions and release tags.
+
+
+
 
 

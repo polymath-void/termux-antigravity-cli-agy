@@ -1,0 +1,240 @@
+[
+  {
+    "offset": 44324365,
+    "pre": "54385302",
+    "orig": "5416",
+    "patch": "701d",
+    "post": "53025414"
+  },
+  {
+    "offset": 91518861,
+    "pre": "5052494f",
+    "orig": "5756",
+    "patch": "735d",
+    "post": "53544154"
+  },
+  {
+    "offset": 93837621,
+    "pre": "435f555f",
+    "orig": "5756",
+    "patch": "735d",
+    "post": "53544154"
+  },
+  {
+    "offset": 104796116,
+    "pre": "e6031faa",
+    "orig": "e036",
+    "patch": "0006",
+    "post": "80d26e10"
+  },
+  {
+    "offset": 105777057,
+    "pre": "ffff1708",
+    "orig": "80",
+    "patch": "01",
+    "post": "c0d2bf00"
+  },
+  {
+    "offset": 105777289,
+    "pre": "ffff1708",
+    "orig": "80",
+    "patch": "01",
+    "post": "c0d2bf00"
+  },
+  {
+    "offset": 105778305,
+    "pre": "ffff1708",
+    "orig": "80",
+    "patch": "01",
+    "post": "c0d2bf00"
+  },
+  {
+    "offset": 105778537,
+    "pre": "ffff1708",
+    "orig": "80",
+    "patch": "01",
+    "post": "c0d2bf00"
+  },
+  {
+    "offset": 105780377,
+    "pre": "ffff1708",
+    "orig": "80",
+    "patch": "01",
+    "post": "c0d2bf00"
+  },
+  {
+    "offset": 105780625,
+    "pre": "ffff1708",
+    "orig": "80",
+    "patch": "01",
+    "post": "c0d2bf00"
+  },
+  {
+    "offset": 144591693,
+    "pre": "30cad229",
+    "orig": "00e0f2",
+    "patch": "6159d3",
+    "post": "097d099b"
+  },
+  {
+    "offset": 145154397,
+    "pre": "00669e0a",
+    "orig": "00c2",
+    "patch": "04c0",
+    "post": "d20c00e7"
+  },
+  {
+    "offset": 146154581,
+    "pre": "1080526f",
+    "orig": "5516",
+    "patch": "711d",
+    "post": "53aa1200"
+  },
+  {
+    "offset": 146154601,
+    "pre": "1d16338b",
+    "orig": "5516",
+    "patch": "711d",
+    "post": "53300d00"
+  },
+  {
+    "offset": 146155117,
+    "pre": "1080526b",
+    "orig": "5516",
+    "patch": "711d",
+    "post": "538f5516"
+  },
+  {
+    "offset": 146155121,
+    "pre": "5516538f",
+    "orig": "5516",
+    "patch": "711d",
+    "post": "53aa1200"
+  },
+  {
+    "offset": 146660497,
+    "pre": "0980d229",
+    "orig": "00e0f2",
+    "patch": "6159d3",
+    "post": "090100f9"
+  },
+  {
+    "offset": 146994845,
+    "pre": "e0c3f229",
+    "orig": "00e0f2",
+    "patch": "6159d3",
+    "post": "1f0109eb"
+  },
+  {
+    "offset": 146998809,
+    "pre": "c8d4f229",
+    "orig": "00e0f2",
+    "patch": "6159d3",
+    "post": "1f0109eb"
+  },
+  {
+    "offset": 146999025,
+    "pre": "c8d4f229",
+    "orig": "00e0f2",
+    "patch": "6159d3",
+    "post": "1f0109eb"
+  },
+  {
+    "offset": 147003917,
+    "pre": "c8d4f229",
+    "orig": "00e0f2",
+    "patch": "6159d3",
+    "post": "1f0109eb"
+  },
+  {
+    "offset": 148112613,
+    "pre": "1d0caa6b",
+    "orig": "5556",
+    "patch": "715d",
+    "post": "d30cd970"
+  },
+  {
+    "offset": 148226601,
+    "pre": "1f40f910",
+    "orig": "5516",
+    "patch": "711d",
+    "post": "536f6200"
+  },
+  {
+    "offset": 148487589,
+    "pre": "1d0caa6b",
+    "orig": "5556",
+    "patch": "715d",
+    "post": "d30cd970"
+  },
+  {
+    "offset": 148878949,
+    "pre": "1d0caa6b",
+    "orig": "5556",
+    "patch": "715d",
+    "post": "d30cd970"
+  },
+  {
+    "offset": 148965605,
+    "pre": "1d0caa6b",
+    "orig": "5556",
+    "patch": "715d",
+    "post": "d30cd970"
+  },
+  {
+    "offset": 149074229,
+    "pre": "1d0caa6b",
+    "orig": "5556",
+    "patch": "715d",
+    "post": "d30cd970"
+  },
+  {
+    "offset": 149107061,
+    "pre": "1d0caa6b",
+    "orig": "5556",
+    "patch": "715d",
+    "post": "d30cd970"
+  },
+  {
+    "offset": 150132265,
+    "pre": "0080526a",
+    "orig": "5616",
+    "patch": "721d",
+    "post": "53faf302"
+  },
+  {
+    "offset": 150133137,
+    "pre": "0318aa29",
+    "orig": "5516",
+    "patch": "711d",
+    "post": "53e9c929"
+  },
+  {
+    "offset": 165577833,
+    "pre": "0000004a",
+    "orig": "b26a",
+    "patch": "9663",
+    "post": "d30f0808"
+  },
+  {
+    "offset": 179425877,
+    "pre": "fdedc52b",
+    "orig": "b22a",
+    "patch": "9623",
+    "post": "d3b24d98"
+  },
+  {
+    "offset": 180408153,
+    "pre": "e5f58bf7",
+    "orig": "5616",
+    "patch": "721d",
+    "post": "5383847f"
+  },
+  {
+    "offset": 186789453,
+    "pre": "45005f5a",
+    "orig": "5456",
+    "patch": "705d",
+    "post": "53743133"
+  }
+]

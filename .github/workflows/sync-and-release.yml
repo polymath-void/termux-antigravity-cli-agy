@@ -20,27 +20,34 @@ jobs:
       - name: Install ARM64 Cross Compilers & Tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu ripgrep curl tar
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu ripgrep curl tar python3
 
       - name: Run Build & Patch Pipeline
         run: |
-          chmod +x scripts/build_standalone.sh
-          ./scripts/build_standalone.sh
+          chmod +x scripts/build_standalone.sh scripts/patch_va39.py
+          bash scripts/build_standalone.sh
 
       - name: Query Upstream Version Tag
         id: version_check
         run: |
-          TAG_NAME="v$(date +'%Y.%m.%d-%H%M')"
+          VERSION="$(cat dist/VERSION 2>/dev/null | tr -d '[:space:]')"
+          if [ -z "$VERSION" ]; then
+            VERSION="1.2.1"
+          fi
+          TAG_NAME="v${VERSION}"
           echo "tag_name=${TAG_NAME}" >> $GITHUB_OUTPUT
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version_check.outputs.tag_name }}
-          name: "Antigravity CLI Termux Standalone ${{ steps.version_check.outputs.tag_name }}"
+          name: "Antigravity CLI Termux Standalone v${{ steps.version_check.outputs.version }}"
           draft: false
           prerelease: false
+          make_latest: true
           files: |
             dist/antigravity-termux-standalone.tar.gz
+            dist/VERSION
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
