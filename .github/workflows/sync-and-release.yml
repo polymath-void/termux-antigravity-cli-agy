@@ -1,6 +1,9 @@
 name: Sync & Build Antigravity Termux Standalone
 
 on:
+  push:
+    branches:
+      - main
   schedule:
     # Run automatically every 6 hours
     - cron: '0 */6 * * *'
