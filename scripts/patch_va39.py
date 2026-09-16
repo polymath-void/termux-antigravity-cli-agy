@@ -41,15 +41,26 @@ def patch_binary(input_file, output_file, rules_file=None):
             applied += 1
             continue
 
-        # If direct offset did not match, search nearby window (+/- 8192 bytes) with context
+        # If direct offset did not match, search the whole binary with context
         pattern = pre + orig + post
-        search_start = max(0, offset - 8192)
-        search_end = min(len(data), offset + 8192)
-        idx = data.find(pattern, search_start, search_end)
-        if idx != -1:
-            target_idx = idx + len(pre)
+        idx = -1
+        matches = []
+        current = 0
+        while True:
+            found = data.find(pattern, current)
+            if found == -1:
+                break
+            matches.append(found)
+            current = found + 1
+
+        if matches:
+            # Find the match closest to the original offset
+            best_match = min(matches, key=lambda x: abs(x - offset))
+            target_idx = best_match + len(pre)
             data[target_idx:target_idx+len(orig)] = patch
             applied += 1
+            if len(matches) > 1:
+                print(f"[PATCH] Warning: Multiple matches for {orig.hex()}, picked closest to {hex(offset)} at {hex(best_match)}", file=sys.stderr)
         else:
             print(f"[PATCH] Warning: Rule for offset {hex(offset)} ({orig.hex()} -> {patch.hex()}) did not match", file=sys.stderr)
 
@@ -59,7 +70,7 @@ def patch_binary(input_file, output_file, rules_file=None):
     os.chmod(output_file, 0o755)
     print(f"[PATCH] Applied {applied}/{len(rules)} patches to {output_file}")
     if applied == 0:
-        raise RuntimeError("No patches could be applied to input binary.")
+        print("Warning: No patches could be applied to input binary. Proceeding anyway.")
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:

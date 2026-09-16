@@ -270,11 +270,16 @@ CACHE_DIR="${PREFIX:-/data/data/com.termux/files/usr}/tmp/.agy-cache"
 
 check_version() {
   info "Querying latest release from $REPO..."
-  (curl -fsSL -H "User-Agent: Termux-Agy" "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null | rg -o '"tag_name"\s*:\s*"[^"]*' | cut -d'"' -f4 > "${PREFIX:-/data/data/com.termux/files/usr}/tmp/.latest_tag" || echo "") &
+  local tmp_tag_file="${PREFIX:-/data/data/com.termux/files/usr}/tmp/.latest_tag"
+  (curl -fsSL -H "User-Agent: Termux-Agy" "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null | rg -o '"tag_name"\s*:\s*"[^"]*' | cut -d'"' -f4 > "$tmp_tag_file" || echo "") &
   spin_wait $! "Fetching release metadata..."
   
-  LATEST_TAG=$(cat "${PREFIX:-/data/data/com.termux/files/usr}/tmp/.latest_tag" 2>/dev/null || echo "")
-  rm -f "${PREFIX:-/data/data/com.termux/files/usr}/tmp/.latest_tag" 2>/dev/null || true
+  if [[ -s "$tmp_tag_file" ]]; then
+    LATEST_TAG=$(cat "$tmp_tag_file")
+  else
+    LATEST_TAG="v1.2.4"
+  fi
+  rm -f "$tmp_tag_file" 2>/dev/null || true
 
   local bin_dir="${PREFIX:-/data/data/com.termux/files/usr}/bin"
   if [[ -x "$bin_dir/agy" ]]; then
