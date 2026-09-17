@@ -1,4 +1,13 @@
 build_workspace/
 dist/
+dist_test/
+glibc/
 *.bak
 *.tar.gz
+*.tar.xz
+*.tar
+*.deb
+*.so
+*.so.*
+*.tmp
+*.log
