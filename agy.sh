@@ -504,6 +504,12 @@ configure_environment() {
   for rc_file in "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.profile"; do
     touch "$rc_file" 2>/dev/null || true
     
+    # 0. Clean up legacy/broken aliases that conflict with the native installation
+    if grep -q 'alias agy=' "$rc_file" 2>/dev/null; then
+      sed -i.bak '/alias agy=/d' "$rc_file"
+      ok "Removed legacy/broken 'agy' aliases from $rc_file"
+    fi
+
     # 1. SSL Certificate path
     if [[ -f "$cert_file" ]]; then
       if ! grep -q "SSL_CERT_FILE" "$rc_file" 2>/dev/null; then
