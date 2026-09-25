@@ -183,6 +183,7 @@ resolve_dependencies() {
   command -v tar >/dev/null 2>&1 || needed_pkgs+=("tar")
   command -v git >/dev/null 2>&1 || needed_pkgs+=("git")
   command -v rg >/dev/null 2>&1 || needed_pkgs+=("ripgrep")
+  command -v python3 >/dev/null 2>&1 || needed_pkgs+=("python")
 
   # SSL certificates & DNS
   if [[ ! -f "${PREFIX:-/data/data/com.termux/files/usr}/etc/tls/cert.pem" ]]; then
@@ -406,6 +407,21 @@ install_binary() {
   info "Installing binaries to $install_bin_dir..."
   install -m 0755 "$TMP_EXTRACT_DIR/agy" "$install_bin_dir/agy.native"
   if [[ -f "$TMP_EXTRACT_DIR/agy.va39" ]]; then
+    info "Applying Android seccomp syscall patches natively..."
+    python3 -c '
+import sys
+target = sys.argv[1]
+try:
+    with open(target, "r+b") as f:
+        data = f.read()
+        # Replace faccessat2 (0x1B7) with faccessat (0x38) to bypass Android SIGSYS
+        patched = data.replace(b"\xe0\x36\x80\xd2", b"\x00\x07\x80\xd2")
+        f.seek(0)
+        f.write(patched)
+        f.truncate()
+except Exception as e:
+    print("Patching failed:", e)
+' "$TMP_EXTRACT_DIR/agy.va39"
     install -m 0755 "$TMP_EXTRACT_DIR/agy.va39" "$install_bin_dir/agy.va39"
   fi
 

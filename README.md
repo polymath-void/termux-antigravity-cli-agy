@@ -39,6 +39,7 @@ While minimal scripts (like basic downloader scripts) only unpack binaries, **`a
 | **Proactive Package Resolution** (`curl`, `tar`, `git`, `ripgrep`) | ❌ (Fails at runtime) | ✅ **Automated `pkg` Installer** |
 | **DNS Resolver Fix** (`/etc/resolv.conf`) | ❌ (Causes connection error) | ✅ **Auto-Configures `resolv-conf`** |
 | **SSL Certificate Export** (`SSL_CERT_FILE`) | ❌ (Causes OAuth SSL errors) | ✅ **Auto-Exports Termux TLS Certs** |
+| **Native Syscall Seccomp Patching** | ❌ (Crashes with `SIGSYS`) | ✅ **Hex Patches `faccessat2` for Native Bionic Execution** |
 | **ARM64 LSE Atomics CPU Fallback** | ❌ (Crashes on older CPUs) | ✅ **Detects & Auto-Installs QEMU Wrapper** |
 | **CLI Argument Parsing** (`-y`, `--check`, `--force`) | ❌ | ✅ **Full Command Line Interface** |
 | **Shell Profile Integration** (`~/.bashrc`, `~/.zshrc`) | ❌ | ✅ **Automated Non-Duplicate Injection** |
@@ -67,14 +68,19 @@ While minimal scripts (like basic downloader scripts) only unpack binaries, **`a
 
 ---
 
-## ⚙️ Hardware Compatibility & ARM64 LSE Atomics
+## ⚙️ Kernel Seccomp & Hardware Compatibility
 
-Google Antigravity CLI binary uses Go runtime optimizations compiled with ARM64 LSE (Large System Extensions) atomic instructions. On older Android chipsets (e.g. Snapdragon 625, 650, 660, 820, or Cortex-A53 cores), executing the binary directly causes a kernel `SIGILL` (Illegal Instruction) crash.
+### Native Syscall Seccomp Patching
+On Android kernels older than 5.8, Go 1.20+ binaries crash natively with `SIGSYS: bad system call` because Android's seccomp filter violently blocks the `faccessat2` (0x1B7) syscall rather than returning `ENOSYS`.
+**`agy.sh` safely resolves this natively** without emulation by surgically hex-patching the downloaded `agy.va39` binary on-the-fly, swapping the unsupported `0x1B7` system call with the universally supported `0x38` (`faccessat`) syscall. This ensures 100% native execution speed.
 
-**`agy.sh` resolves this automatically:**
+### ARM64 LSE Atomics CPU Fallback
+Additionally, the binary uses Go runtime optimizations compiled with ARM64 LSE (Large System Extensions) atomic instructions. On older Android chipsets (e.g., Snapdragon 625/660 or Cortex-A53 cores), executing the binary natively causes a kernel `SIGILL` (Illegal Instruction) crash.
+
+**For LSE Atomcis, `agy.sh` falls back intelligently:**
 1. Scans `/proc/cpuinfo` for native `atomics` instruction support.
 2. If absent, it automatically installs `qemu-user-aarch64` from Termux repositories.
-3. Wraps binary execution transparently via QEMU user emulation so `agy` runs smoothly on 100% of ARM64 Android devices.
+3. Wraps binary execution transparently via QEMU user emulation so `agy` runs smoothly on 100% of legacy ARM64 Android devices.
 
 ---
 
